@@ -38,7 +38,6 @@ import org.eclipse.tycho.core.TychoConstants;
 import org.eclipse.tycho.core.utils.PlatformPropertiesUtils;
 import org.eclipse.tycho.core.utils.TychoProjectUtils;
 import org.eclipse.tycho.p2.facade.RepositoryReferenceTool;
-import org.eclipse.tycho.p2.resolver.TargetDefinitionFile;
 import org.eclipse.tycho.p2.target.facade.TargetDefinition.InstallableUnitLocation;
 import org.eclipse.tycho.p2.target.facade.TargetDefinition.Repository;
 import org.eclipse.tycho.p2.tools.RepositoryReferences;
@@ -79,6 +78,21 @@ public final class DynamicDirectorMojo extends AbstractDirectorMojo {
     /** @component */
     private EquinoxLauncher launcher;
 
+    /**
+     * Whether or not to consult the target platform definition in addition to the resolved target
+     * platform for the project; useful when repositories containing additionalIUs are already
+     * specified in the target definition
+     * 
+     * @parameter default-value="false"
+     */
+    private Boolean useFullTargetPlatform;
+
+    /** @parameter */
+    private List<String> additionalIUs;
+
+    /** @parameter */
+    private List<URI> additionalRepositories;
+
     public void execute() throws MojoExecutionException, MojoFailureException {
         List<Product> products = getProductConfig().getProducts();
         if (products.isEmpty()) {
@@ -116,24 +130,8 @@ public final class DynamicDirectorMojo extends AbstractDirectorMojo {
                     destination = new File(destination, rootFolder);
                 }
 
-                //finding out all the target platform locations
-                TargetPlatformConfiguration configuration = TychoProjectUtils
-                        .getTargetPlatformConfiguration(getProject());
-                String commaSeparatedP2ReposURIs = "";
                 String localP2Repository = "";
-                List<URI> p2ReposURIs = new ArrayList<URI>();
-                TargetDefinitionFile file;
                 try {
-                    file = TargetDefinitionFile.read(configuration.getTarget());
-                    @SuppressWarnings("unchecked")
-                    List<InstallableUnitLocation> locations = (List<InstallableUnitLocation>) file.getLocations();
-                    for (InstallableUnitLocation location : locations) {
-                        List<? extends Repository> repositories = location.getRepositories();
-                        for (Repository repository : repositories) {
-                            p2ReposURIs.add(repository.getLocation());
-                        }
-                    }
-                    commaSeparatedP2ReposURIs = toCommaSeparatedList(p2ReposURIs);
                     //finding out the local repository location
                     File localP2RepositoryFile = new File(getBuildDirectory(), "repository");
                     localP2Repository = localP2RepositoryFile.getCanonicalPath();
@@ -143,12 +141,31 @@ public final class DynamicDirectorMojo extends AbstractDirectorMojo {
                     e.printStackTrace();
                 }
 
+				String commaSeparatedP2ReposURIs = "";
+				//finding out all the target platform locations
+				if (useFullTargetPlatform) {
+					commaSeparatedP2ReposURIs = extractTargetPlatformRepos();
+				}
+				
                 //yes, metadataRepositoryURLs and artifactRepositoryURLs are the same : they include the target platform locations
                 // + the local target/repository ; that should be enough to build the product
-                String metadataRepositoryURLs = commaSeparatedP2ReposURIs + "," + localP2Repository;
+                String metadataRepositoryURLs = localP2Repository + commaSeparatedP2ReposURIs;
                 String artifactRepositoryURLs = metadataRepositoryURLs;
+
+                //additionalRepositories and additionalIUs merged in from https://bugs.eclipse.org/bugs/show_bug.cgi?id=361722
+                if (this.additionalRepositories != null && this.additionalRepositories.size() > 0) {
+                    String repos = toCommaSeparatedList(this.additionalRepositories);
+                    metadataRepositoryURLs += "," + repos;
+                    artifactRepositoryURLs += "," + repos;
+                }
+
+                String installIUs = "";
+                if (this.additionalIUs != null && this.additionalIUs.size() > 0) {
+                    installIUs = "," + toCommaSeparatedString(additionalIUs);
+                }
+
                 String nameForEnvironment = ProfileName.getNameForEnvironment(env, profileNames, profile);
-                String[] args = getArgsForDirectorCall(product, env, destination, metadataRepositoryURLs,
+                String[] args = getArgsForDirectorCall(product, installIUs, env, destination, metadataRepositoryURLs,
                         artifactRepositoryURLs, nameForEnvironment, installFeatures);
                 getLog().info("Calling director with arguments: " + Arrays.toString(args));
                 final Object result = director.run(args);
@@ -227,7 +244,7 @@ public final class DynamicDirectorMojo extends AbstractDirectorMojo {
         String artifactRepositoryURLs = toCommaSeparatedList(sources.getArtifactRepositories()) + ","
                 + productRepository;
         String nameForEnvironment = ProfileName.getNameForEnvironment(env, profileNames, profile);
-        String[] args = getArgsForDirectorCall(directorProduct, env, directorApplicationDir, metadataRepositoryURLs,
+        String[] args = getArgsForDirectorCall(directorProduct, "", env, directorApplicationDir, metadataRepositoryURLs,
                 artifactRepositoryURLs, nameForEnvironment, true);
         getLog().info("Calling director with arguments: " + Arrays.toString(args));
         final Object result = director.run(args);
