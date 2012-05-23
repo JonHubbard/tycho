@@ -12,6 +12,7 @@
 package org.eclipse.tycho.plugins.p2.director;
 
 import java.io.File;
+import java.net.URI;
 import java.util.Arrays;
 import java.util.List;
 
@@ -43,6 +44,21 @@ public final class DirectorMojo extends AbstractDirectorMojo {
 
     /** @component */
     private RepositoryReferenceTool repositoryReferenceTool;
+	
+	/**
+     * Whether or not to consult the target platform definition in addition to the resolved target
+     * platform for the project; useful when repositories containing additionalIUs are already
+     * specified in the target definition
+     * 
+     * @parameter default-value="false"
+     */
+    private Boolean useFullTargetPlatform;
+
+    /** @parameter */
+    private List<String> additionalIUs;
+
+    /** @parameter */
+    private List<URI> additionalRepositories;
 
     public void execute() throws MojoExecutionException, MojoFailureException {
         List<Product> products = getProductConfig().getProducts();
@@ -64,8 +80,30 @@ public final class DirectorMojo extends AbstractDirectorMojo {
 
                 String metadataRepositoryURLs = toCommaSeparatedList(sources.getMetadataRepositories());
                 String artifactRepositoryURLs = toCommaSeparatedList(sources.getArtifactRepositories());
+				
+				String commaSeparatedP2ReposURIs = "";
+				//finding out all the target platform locations
+				if (useFullTargetPlatform) {
+					commaSeparatedP2ReposURIs = extractTargetPlatformRepos();
+				}
+				
+				metadataRepositoryURLs += commaSeparatedP2ReposURIs;
+				artifactRepositoryURLs += commaSeparatedP2ReposURIs;
+				
+				//additionalRepositories and additionalIUs merged in from https://bugs.eclipse.org/bugs/show_bug.cgi?id=361722
+                if (this.additionalRepositories != null && this.additionalRepositories.size() > 0) {
+                    String repos = toCommaSeparatedList(this.additionalRepositories);
+                    metadataRepositoryURLs += "," + repos;
+                    artifactRepositoryURLs += "," + repos;
+                }
+
+                String installIUs = "";
+                if (this.additionalIUs != null && this.additionalIUs.size() > 0) {
+                    installIUs = "," + toCommaSeparatedString(additionalIUs);
+                }
+				
                 String nameForEnvironment = ProfileName.getNameForEnvironment(env, profileNames, profile);
-                String[] args = getArgsForDirectorCall(product, env, destination, metadataRepositoryURLs,
+                String[] args = getArgsForDirectorCall(product, installIUs, env, destination, metadataRepositoryURLs,
                         artifactRepositoryURLs, nameForEnvironment, installFeatures);
                 getLog().info("Calling director with arguments: " + Arrays.toString(args));
                 final Object result = director.run(args);
