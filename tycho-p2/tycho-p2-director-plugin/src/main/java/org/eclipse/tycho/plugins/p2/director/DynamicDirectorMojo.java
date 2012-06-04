@@ -167,7 +167,10 @@ public final class DynamicDirectorMojo extends AbstractDirectorMojo {
                 String nameForEnvironment = ProfileName.getNameForEnvironment(env, profileNames, profile);
                 String[] args = getArgsForDirectorCall(product, installIUs, env, destination, metadataRepositoryURLs,
                         artifactRepositoryURLs, nameForEnvironment, installFeatures);
-                getLog().info("Calling director with arguments: " + Arrays.toString(args));
+                getLog().info(
+                        "Installing product " + product.getId() + " for environment " + env + " to "
+                                + destination.getAbsolutePath());
+                getLog().debug("Calling director with arguments: " + Arrays.toString(args));
                 final Object result = director.run(args);
                 if (!DirectorApplicationWrapper.EXIT_OK.equals(result)) {
                     throw new MojoFailureException("P2 director return code was " + result);

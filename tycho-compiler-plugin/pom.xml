@@ -17,7 +17,7 @@
 	<parent>
 		<groupId>org.eclipse.tycho</groupId>
 		<artifactId>tycho</artifactId>
-		<version>0.15.0-SNAPSHOT</version>
+		<version>0.16.0-SNAPSHOT</version>
 	</parent>
 
 	<artifactId>tycho-compiler-plugin</artifactId>
@@ -62,11 +62,6 @@
 			<version>${project.version}</version>
 		</dependency>
 
-		<dependency>
-			<groupId>org.apache.maven.plugin-testing</groupId>
-			<artifactId>maven-plugin-testing-harness</artifactId>
-			<scope>test</scope>
-		</dependency>
 		<dependency>
 			<groupId>org.eclipse.tycho</groupId>
 			<artifactId>tycho-testing-harness</artifactId>
