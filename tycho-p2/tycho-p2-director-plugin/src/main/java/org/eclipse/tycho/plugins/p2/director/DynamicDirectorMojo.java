@@ -13,7 +13,6 @@ package org.eclipse.tycho.plugins.p2.director;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
@@ -33,13 +32,9 @@ import org.eclipse.sisu.equinox.launching.EquinoxLauncher;
 import org.eclipse.sisu.equinox.launching.internal.DefaultEquinoxInstallation;
 import org.eclipse.sisu.equinox.launching.internal.EquinoxLaunchConfiguration;
 import org.eclipse.tycho.core.TargetEnvironment;
-import org.eclipse.tycho.core.TargetPlatformConfiguration;
 import org.eclipse.tycho.core.TychoConstants;
 import org.eclipse.tycho.core.utils.PlatformPropertiesUtils;
-import org.eclipse.tycho.core.utils.TychoProjectUtils;
 import org.eclipse.tycho.p2.facade.RepositoryReferenceTool;
-import org.eclipse.tycho.p2.target.facade.TargetDefinition.InstallableUnitLocation;
-import org.eclipse.tycho.p2.target.facade.TargetDefinition.Repository;
 import org.eclipse.tycho.p2.tools.RepositoryReferences;
 import org.eclipse.tycho.p2.tools.director.facade.DirectorApplicationWrapper;
 
@@ -78,20 +73,20 @@ public final class DynamicDirectorMojo extends AbstractDirectorMojo {
     /** @component */
     private EquinoxLauncher launcher;
 
-    /**
-     * Whether or not to consult the target platform definition in addition to the resolved target
-     * platform for the project; useful when repositories containing additionalIUs are already
-     * specified in the target definition
-     * 
-     * @parameter default-value="false"
-     */
-    private Boolean useFullTargetPlatform;
-
     /** @parameter */
     private List<String> additionalIUs;
 
     /** @parameter */
     private List<URI> additionalRepositories;
+
+    /**
+     * Whether or not to consult the target platform configuration to install any
+     * <extraRequirements> that are <type>p2-installable-unit</type>; useful when repositories
+     * already specified in the target definition contain IUs to be installed alongside the product
+     * 
+     * @parameter default-value="false"
+     */
+    private Boolean installExtraRequirements;
 
     public void execute() throws MojoExecutionException, MojoFailureException {
         List<Product> products = getProductConfig().getProducts();
@@ -136,20 +131,26 @@ public final class DynamicDirectorMojo extends AbstractDirectorMojo {
                     File localP2RepositoryFile = new File(getBuildDirectory(), "repository");
                     localP2Repository = localP2RepositoryFile.getCanonicalPath();
                     localP2Repository = localP2Repository.replace("\\", "/");
-                    localP2Repository = "file:/" + localP2Repository;
+                    localP2Repository = "file:/" + localP2Repository;// + "/";
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
 
-				String commaSeparatedP2ReposURIs = "";
-				//finding out all the target platform locations
-				if (useFullTargetPlatform) {
-					commaSeparatedP2ReposURIs = extractTargetPlatformRepos();
-				}
-				
+                String localP2TargetPlatformRepository = "";
+
+                try {
+                    //finding out the local repository location
+                    File localP2RepositoryFile = new File(getBuildDirectory(), "targetPlatformRepository");
+                    localP2TargetPlatformRepository = localP2RepositoryFile.getCanonicalPath();
+                    localP2TargetPlatformRepository = localP2TargetPlatformRepository.replace("\\", "/");
+                    localP2TargetPlatformRepository = "file:/" + localP2TargetPlatformRepository;// + "/";
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+
                 //yes, metadataRepositoryURLs and artifactRepositoryURLs are the same : they include the target platform locations
                 // + the local target/repository ; that should be enough to build the product
-                String metadataRepositoryURLs = localP2Repository + commaSeparatedP2ReposURIs;
+                String metadataRepositoryURLs = localP2Repository + "," + localP2TargetPlatformRepository;
                 String artifactRepositoryURLs = metadataRepositoryURLs;
 
                 //additionalRepositories and additionalIUs merged in from https://bugs.eclipse.org/bugs/show_bug.cgi?id=361722
@@ -160,8 +161,12 @@ public final class DynamicDirectorMojo extends AbstractDirectorMojo {
                 }
 
                 String installIUs = "";
+                if (installExtraRequirements) {
+                    installIUs = "," + toCommaSeparatedString(getExtraReqs());
+                }
+
                 if (this.additionalIUs != null && this.additionalIUs.size() > 0) {
-                    installIUs = "," + toCommaSeparatedString(additionalIUs);
+                    installIUs += "," + toCommaSeparatedString(additionalIUs);
                 }
 
                 String nameForEnvironment = ProfileName.getNameForEnvironment(env, profileNames, profile);
@@ -218,6 +223,7 @@ public final class DynamicDirectorMojo extends AbstractDirectorMojo {
         Product directorProduct = new Product("tycho-bundles-external-dynamic");
         final DirectorApplicationWrapper director = p2.getService(DirectorApplicationWrapper.class);
         int flags = RepositoryReferenceTool.REPOSITORIES_INCLUDE_CURRENT_MODULE;
+
         RepositoryReferences sources = repositoryReferenceTool
                 .getVisibleRepositories(getProject(), getSession(), flags);
 
@@ -244,8 +250,8 @@ public final class DynamicDirectorMojo extends AbstractDirectorMojo {
         String artifactRepositoryURLs = toCommaSeparatedList(sources.getArtifactRepositories()) + ","
                 + productRepository;
         String nameForEnvironment = ProfileName.getNameForEnvironment(env, profileNames, profile);
-        String[] args = getArgsForDirectorCall(directorProduct, "", env, directorApplicationDir, metadataRepositoryURLs,
-                artifactRepositoryURLs, nameForEnvironment, true);
+        String[] args = getArgsForDirectorCall(directorProduct, "", env, directorApplicationDir,
+                metadataRepositoryURLs, artifactRepositoryURLs, nameForEnvironment, true);
         getLog().info("Calling director with arguments: " + Arrays.toString(args));
         final Object result = director.run(args);
         if (!DirectorApplicationWrapper.EXIT_OK.equals(result)) {

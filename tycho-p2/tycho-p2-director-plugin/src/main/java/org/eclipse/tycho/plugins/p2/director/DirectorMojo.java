@@ -44,15 +44,15 @@ public final class DirectorMojo extends AbstractDirectorMojo {
 
     /** @component */
     private RepositoryReferenceTool repositoryReferenceTool;
-	
-	/**
-     * Whether or not to consult the target platform definition in addition to the resolved target
-     * platform for the project; useful when repositories containing additionalIUs are already
-     * specified in the target definition
+
+    /**
+     * Whether or not to consult the target platform configuration to install any
+     * <extraRequirements> that are <type>p2-installable-unit</type>; useful when repositories
+     * already specified in the target definition contain IUs to be installed alongside the product
      * 
      * @parameter default-value="false"
      */
-    private Boolean useFullTargetPlatform;
+    private Boolean installExtraRequirements;
 
     /** @parameter */
     private List<String> additionalIUs;
@@ -80,17 +80,8 @@ public final class DirectorMojo extends AbstractDirectorMojo {
 
                 String metadataRepositoryURLs = toCommaSeparatedList(sources.getMetadataRepositories());
                 String artifactRepositoryURLs = toCommaSeparatedList(sources.getArtifactRepositories());
-				
-				String commaSeparatedP2ReposURIs = "";
-				//finding out all the target platform locations
-				if (useFullTargetPlatform) {
-					commaSeparatedP2ReposURIs = extractTargetPlatformRepos();
-				}
-				
-				metadataRepositoryURLs += commaSeparatedP2ReposURIs;
-				artifactRepositoryURLs += commaSeparatedP2ReposURIs;
-				
-				//additionalRepositories and additionalIUs merged in from https://bugs.eclipse.org/bugs/show_bug.cgi?id=361722
+
+                //additionalRepositories and additionalIUs merged in from https://bugs.eclipse.org/bugs/show_bug.cgi?id=361722
                 if (this.additionalRepositories != null && this.additionalRepositories.size() > 0) {
                     String repos = toCommaSeparatedList(this.additionalRepositories);
                     metadataRepositoryURLs += "," + repos;
@@ -98,10 +89,14 @@ public final class DirectorMojo extends AbstractDirectorMojo {
                 }
 
                 String installIUs = "";
+                if (installExtraRequirements) {
+                    installIUs = "," + toCommaSeparatedString(getExtraReqs());
+                }
+
                 if (this.additionalIUs != null && this.additionalIUs.size() > 0) {
                     installIUs = "," + toCommaSeparatedString(additionalIUs);
                 }
-				
+
                 String nameForEnvironment = ProfileName.getNameForEnvironment(env, profileNames, profile);
                 String[] args = getArgsForDirectorCall(product, installIUs, env, destination, metadataRepositoryURLs,
                         artifactRepositoryURLs, nameForEnvironment, installFeatures);
